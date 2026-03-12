@@ -56,9 +56,9 @@ internal/
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `incidentio_incidents_total` | Gauge | status, severity, type, mode, visibility | Count of incidents |
+| `incidentio_incidents_total` | Gauge | status, severity, type, mode, visibility, team | Count of incidents |
 | `incidentio_incidents_duration_seconds` | Gauge | name, severity | Duration metric values |
-| `incidentio_alerts_total` | Gauge | status | Count of alerts |
+| `incidentio_alerts_total` | Gauge | status, team | Count of alerts |
 | `incidentio_severities` | Gauge | name, rank | Configured severities |
 | `incidentio_scrape_duration_seconds` | Gauge | — | Time taken for last scrape |
 | `incidentio_scrape_errors_total` | Counter | — | Total scrape errors |

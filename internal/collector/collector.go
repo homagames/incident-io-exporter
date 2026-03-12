@@ -37,8 +37,8 @@ func New(client APIClient) *Collector {
 		client: client,
 		incidentsTotal: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "incidents", "total"),
-			"Total number of incidents by status, severity, type, mode, and visibility.",
-			[]string{"status", "severity", "type", "mode", "visibility"},
+			"Total number of incidents by status, severity, type, mode, visibility, and team.",
+			[]string{"status", "severity", "type", "mode", "visibility", "team"},
 			nil,
 		),
 		incidentDuration: prometheus.NewDesc(
@@ -49,8 +49,8 @@ func New(client APIClient) *Collector {
 		),
 		alertsTotal: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "alerts", "total"),
-			"Total number of alerts by status.",
-			[]string{"status"},
+			"Total number of alerts by status and team.",
+			[]string{"status", "team"},
 			nil,
 		),
 		severities: prometheus.NewDesc(

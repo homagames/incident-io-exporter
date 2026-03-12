@@ -10,7 +10,7 @@ import (
 func collectIncidents(ch chan<- prometheus.Metric, totalDesc, durationDesc *prometheus.Desc, incidents []client.Incident) {
 	// Count incidents by label combination
 	type key struct {
-		status, severity, incidentType, mode, visibility string
+		status, severity, incidentType, mode, visibility, team string
 	}
 	counts := make(map[key]float64)
 
@@ -24,14 +24,17 @@ func collectIncidents(ch chan<- prometheus.Metric, totalDesc, durationDesc *prom
 			incType = inc.Type.Name
 		}
 
-		k := key{
-			status:       inc.Status.Name,
-			severity:     severity,
-			incidentType: incType,
-			mode:         inc.Mode,
-			visibility:   inc.Visibility,
+		for _, team := range inc.Teams() {
+			k := key{
+				status:       inc.Status.Name,
+				severity:     severity,
+				incidentType: incType,
+				mode:         inc.Mode,
+				visibility:   inc.Visibility,
+				team:         team,
+			}
+			counts[k]++
 		}
-		counts[k]++
 
 		// Emit duration metrics per incident
 		for _, d := range inc.Duration {
@@ -51,7 +54,7 @@ func collectIncidents(ch chan<- prometheus.Metric, totalDesc, durationDesc *prom
 			totalDesc,
 			prometheus.GaugeValue,
 			v,
-			k.status, k.severity, k.incidentType, k.mode, k.visibility,
+			k.status, k.severity, k.incidentType, k.mode, k.visibility, k.team,
 		)
 	}
 }
