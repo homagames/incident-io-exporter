@@ -50,6 +50,9 @@ docker_manifests:
       - "ghcr.io/homagames/incident-io-exporter:{{ .Version }}-amd64"
       - "ghcr.io/homagames/incident-io-exporter:{{ .Version }}-arm64"
 
+release:
+  mode: append
+
 checksum:
   name_template: "checksums.txt"
 
