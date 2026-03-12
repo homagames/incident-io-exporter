@@ -1,0 +1,10 @@
+FROM scratch
+
+COPY --from=alpine:latest /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY incident-io-exporter /incident-io-exporter
+
+USER 65534:65534
+
+EXPOSE 9090
+
+ENTRYPOINT ["/incident-io-exporter"]

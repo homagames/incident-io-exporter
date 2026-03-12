@@ -1,0 +1,11 @@
+apiVersion: v2
+name: incident-io-exporter
+description: Prometheus exporter for incident.io
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/homagames/incident-io-exporter
+sources:
+  - https://github.com/homagames/incident-io-exporter
+maintainers:
+  - name: homagames
