@@ -23,7 +23,7 @@ Prometheus exporter for [incident.io](https://incident.io) — collects incident
 
 ```bash
 helm install incident-io-exporter \
-  oci://ghcr.io/homagames/charts/incident-io-exporter \
+  oci://ghcr.io/homagames/incident-io-exporter/charts/incident-io-exporter \
   --set existingSecret=my-incident-io-secret
 ```
 
@@ -180,7 +180,7 @@ Releases are fully automated on the `main` branch:
 1. **semantic-release** determines the next version from commit messages
 2. **goreleaser** builds multi-arch binaries and Docker images
 3. Container images are pushed to `ghcr.io/homagames/incident-io-exporter`
-4. Helm chart is packaged and pushed to `oci://ghcr.io/homagames/charts`
+4. Helm chart is packaged and pushed to `oci://ghcr.io/homagames/incident-io-exporter/charts`
 
 ## License
 

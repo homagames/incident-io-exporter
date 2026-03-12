@@ -82,4 +82,4 @@ jobs:
       - name: Push to GHCR OCI registry
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-          helm push .helm-packages/*.tgz oci://ghcr.io/homagames/charts
+          helm push .helm-packages/*.tgz oci://ghcr.io/homagames/incident-io-exporter/charts
