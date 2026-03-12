@@ -3,6 +3,7 @@ package collector
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/homagames/incident-io-exporter/internal/client"
 	"github.com/prometheus/client_golang/prometheus"
@@ -16,11 +17,9 @@ type mockClient struct {
 	incidents  []client.Incident
 	alerts     []client.Alert
 	severities []client.Severity
-	statuses   []client.IncidentStatus
 	incErr     error
 	alertErr   error
 	sevErr     error
-	statusErr  error
 }
 
 func (m *mockClient) ListIncidents() ([]client.Incident, error) {
@@ -35,8 +34,8 @@ func (m *mockClient) ListSeverities() ([]client.Severity, error) {
 	return m.severities, m.sevErr
 }
 
-func (m *mockClient) ListIncidentStatuses() ([]client.IncidentStatus, error) {
-	return m.statuses, m.statusErr
+func newTestCollector(mc *mockClient) *Collector {
+	return New(mc, 1*time.Minute, "test")
 }
 
 func collectMetrics(t *testing.T, c *Collector) []*dto.MetricFamily {
@@ -58,7 +57,7 @@ func findMetricFamily(families []*dto.MetricFamily, name string) *dto.MetricFami
 }
 
 func TestCollectorDescribe(t *testing.T) {
-	c := New(&mockClient{})
+	c := newTestCollector(&mockClient{})
 	ch := make(chan *prometheus.Desc, 10)
 	c.Describe(ch)
 	close(ch)
@@ -67,7 +66,7 @@ func TestCollectorDescribe(t *testing.T) {
 	for d := range ch {
 		descs = append(descs, d)
 	}
-	assert.Len(t, descs, 6)
+	assert.Len(t, descs, 7) // 6 original + buildInfo
 }
 
 func TestCollect_Incidents(t *testing.T) {
@@ -107,7 +106,7 @@ func TestCollect_Incidents(t *testing.T) {
 		severities: []client.Severity{},
 	}
 
-	c := New(mc)
+	c := newTestCollector(mc)
 	families := collectMetrics(t, c)
 
 	incTotal := findMetricFamily(families, "incidentio_incidents_total")
@@ -143,7 +142,7 @@ func TestCollect_Alerts(t *testing.T) {
 		severities: []client.Severity{},
 	}
 
-	c := New(mc)
+	c := newTestCollector(mc)
 	families := collectMetrics(t, c)
 
 	alertTotal := findMetricFamily(families, "incidentio_alerts_total")
@@ -176,7 +175,7 @@ func TestCollect_Severities(t *testing.T) {
 		},
 	}
 
-	c := New(mc)
+	c := newTestCollector(mc)
 	families := collectMetrics(t, c)
 
 	sevs := findMetricFamily(families, "incidentio_severities")
@@ -200,17 +199,31 @@ func TestCollect_DurationMetrics(t *testing.T) {
 					},
 				},
 			},
+			{
+				ID:        "2",
+				Reference: "INC-2",
+				Mode:      "standard",
+				Status:    client.IncidentStatus{Name: "Closed"},
+				Severity:  &client.Severity{Name: "Critical"},
+				Duration: []client.DurationValue{
+					{
+						Metric:       client.DurationMetric{Name: "time_to_resolve"},
+						ValueSeconds: 1800,
+					},
+				},
+			},
 		},
 		severities: []client.Severity{},
 	}
 
-	c := New(mc)
+	c := newTestCollector(mc)
 	families := collectMetrics(t, c)
 
 	dur := findMetricFamily(families, "incidentio_incidents_duration_seconds")
 	require.NotNil(t, dur)
-	assert.Len(t, dur.GetMetric(), 1)
-	assert.Equal(t, float64(3600), dur.GetMetric()[0].GetGauge().GetValue())
+	assert.Len(t, dur.GetMetric(), 1) // aggregated by severity+metric
+	// Average of 3600 and 1800 = 2700
+	assert.Equal(t, float64(2700), dur.GetMetric()[0].GetGauge().GetValue())
 }
 
 func TestCollect_ScrapeMetrics(t *testing.T) {
@@ -218,7 +231,7 @@ func TestCollect_ScrapeMetrics(t *testing.T) {
 		severities: []client.Severity{},
 	}
 
-	c := New(mc)
+	c := newTestCollector(mc)
 	families := collectMetrics(t, c)
 
 	sd := findMetricFamily(families, "incidentio_scrape_duration_seconds")
@@ -229,6 +242,26 @@ func TestCollect_ScrapeMetrics(t *testing.T) {
 	assert.Equal(t, float64(0), se.GetMetric()[0].GetGauge().GetValue())
 }
 
+func TestCollect_BuildInfo(t *testing.T) {
+	mc := &mockClient{
+		severities: []client.Severity{},
+	}
+
+	c := New(mc, 1*time.Minute, "1.2.3")
+	families := collectMetrics(t, c)
+
+	bi := findMetricFamily(families, "incidentio_build_info")
+	require.NotNil(t, bi)
+	assert.Len(t, bi.GetMetric(), 1)
+
+	labels := map[string]string{}
+	for _, l := range bi.GetMetric()[0].GetLabel() {
+		labels[l.GetName()] = l.GetValue()
+	}
+	assert.Equal(t, "1.2.3", labels["version"])
+	assert.Equal(t, float64(1), bi.GetMetric()[0].GetGauge().GetValue())
+}
+
 func TestCollect_WithErrors(t *testing.T) {
 	mc := &mockClient{
 		incErr:   errors.New("incidents failed"),
@@ -236,7 +269,7 @@ func TestCollect_WithErrors(t *testing.T) {
 		sevErr:   errors.New("severities failed"),
 	}
 
-	c := New(mc)
+	c := newTestCollector(mc)
 	families := collectMetrics(t, c)
 
 	se := findMetricFamily(families, "incidentio_scrape_errors_total")
@@ -259,10 +292,43 @@ func TestCollect_IncidentsWithNilSeverityAndType(t *testing.T) {
 		severities: []client.Severity{},
 	}
 
-	c := New(mc)
+	c := newTestCollector(mc)
 	families := collectMetrics(t, c)
 
 	incTotal := findMetricFamily(families, "incidentio_incidents_total")
 	require.NotNil(t, incTotal)
 	assert.Len(t, incTotal.GetMetric(), 1)
+}
+
+func TestCollect_CachingBehavior(t *testing.T) {
+	callCount := 0
+	mc := &mockClient{
+		severities: []client.Severity{},
+	}
+
+	// Wrap to count calls
+	c := New(mc, 1*time.Minute, "test")
+
+	// First collect should fetch
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(c)
+	_, err := reg.Gather()
+	require.NoError(t, err)
+
+	// Record the cached data
+	c.mu.Lock()
+	firstScrape := c.lastScrape
+	c.mu.Unlock()
+	assert.False(t, firstScrape.IsZero())
+
+	// Second collect within interval should use cache (lastScrape unchanged)
+	_, err = reg.Gather()
+	require.NoError(t, err)
+
+	c.mu.Lock()
+	secondScrape := c.lastScrape
+	c.mu.Unlock()
+	assert.Equal(t, firstScrape, secondScrape)
+
+	_ = callCount
 }

@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,9 +47,35 @@ func TestGet_Success(t *testing.T) {
 	assert.Equal(t, expected, result)
 }
 
-func TestGet_RateLimit(t *testing.T) {
+func TestGet_RateLimitRetry(t *testing.T) {
+	var attempts int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Retry-After", "30")
+		count := atomic.AddInt32(&attempts, 1)
+		if count <= 2 {
+			w.Header().Set("Retry-After", "0")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		// Succeed on third attempt
+		json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
+	}))
+	defer srv.Close()
+
+	c := New("key")
+	c.SetBaseURL(srv.URL)
+
+	var result map[string]string
+	err := c.get("/v1/test", nil, &result)
+	require.NoError(t, err)
+	assert.Equal(t, "true", result["ok"])
+	assert.Equal(t, int32(3), atomic.LoadInt32(&attempts))
+}
+
+func TestGet_RateLimitExhausted(t *testing.T) {
+	var attempts int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&attempts, 1)
+		w.Header().Set("Retry-After", "0")
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	defer srv.Close()
@@ -58,7 +86,8 @@ func TestGet_RateLimit(t *testing.T) {
 	var result map[string]interface{}
 	err := c.get("/v1/test", nil, &result)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "rate limited")
+	assert.Contains(t, err.Error(), "rate limited after")
+	assert.Equal(t, int32(maxRetries+1), atomic.LoadInt32(&attempts))
 }
 
 func TestGet_ServerError(t *testing.T) {
@@ -98,12 +127,31 @@ func TestPaginate(t *testing.T) {
 	err := paginate(func(cursor string) (string, error) {
 		callCount++
 		if callCount < 3 {
-			return "next", nil
+			return "next-" + string(rune('0'+callCount)), nil
 		}
 		return "", nil
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 3, callCount)
+}
+
+func TestPaginate_StuckCursor(t *testing.T) {
+	err := paginate(func(cursor string) (string, error) {
+		return "same-cursor", nil
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pagination stuck")
+}
+
+func TestParseRetryAfter(t *testing.T) {
+	// Valid header
+	assert.Equal(t, 5*time.Second, parseRetryAfter("5", 0))
+	// Empty header — exponential backoff
+	assert.Equal(t, 1*time.Second, parseRetryAfter("", 0))
+	assert.Equal(t, 2*time.Second, parseRetryAfter("", 1))
+	assert.Equal(t, 4*time.Second, parseRetryAfter("", 2))
+	// Invalid header
+	assert.Equal(t, 1*time.Second, parseRetryAfter("abc", 0))
 }
 
 func TestAddPaginationParams(t *testing.T) {

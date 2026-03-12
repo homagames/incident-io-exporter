@@ -16,12 +16,13 @@ type APIClient interface {
 	ListIncidents() ([]client.Incident, error)
 	ListAlerts() ([]client.Alert, error)
 	ListSeverities() ([]client.Severity, error)
-	ListIncidentStatuses() ([]client.IncidentStatus, error)
 }
 
 // Collector implements prometheus.Collector for incident.io metrics.
+// It caches API results and only refreshes after the configured interval.
 type Collector struct {
-	client APIClient
+	client         APIClient
+	scrapeInterval time.Duration
 
 	incidentsTotal   *prometheus.Desc
 	incidentDuration *prometheus.Desc
@@ -29,12 +30,28 @@ type Collector struct {
 	severities       *prometheus.Desc
 	scrapeDuration   *prometheus.Desc
 	scrapeErrors     *prometheus.Desc
+	buildInfo        *prometheus.Desc
+
+	mu          sync.Mutex
+	lastScrape  time.Time
+	cachedData  *scrapeResult
+	version     string
+}
+
+type scrapeResult struct {
+	incidents []client.Incident
+	alerts    []client.Alert
+	sevs      []client.Severity
+	errors    float64
+	duration  time.Duration
 }
 
 // New creates a new Collector.
-func New(client APIClient) *Collector {
+func New(apiClient APIClient, scrapeInterval time.Duration, version string) *Collector {
 	return &Collector{
-		client: client,
+		client:         apiClient,
+		scrapeInterval: scrapeInterval,
+		version:        version,
 		incidentsTotal: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "incidents", "total"),
 			"Total number of incidents by status, severity, type, mode, visibility, and team.",
@@ -44,7 +61,7 @@ func New(client APIClient) *Collector {
 		incidentDuration: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "incidents", "duration_seconds"),
 			"Duration metric values for incidents.",
-			[]string{"incident", "severity", "metric"},
+			[]string{"severity", "metric"},
 			nil,
 		),
 		alertsTotal: prometheus.NewDesc(
@@ -71,6 +88,12 @@ func New(client APIClient) *Collector {
 			nil,
 			nil,
 		),
+		buildInfo: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "build_info"),
+			"Build information for the exporter.",
+			[]string{"version"},
+			nil,
+		),
 	}
 }
 
@@ -82,26 +105,47 @@ func (c *Collector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.severities
 	ch <- c.scrapeDuration
 	ch <- c.scrapeErrors
+	ch <- c.buildInfo
 }
 
 // Collect fetches data from incident.io and sends metrics to the channel.
+// Results are cached for the configured scrape interval.
 func (c *Collector) Collect(ch chan<- prometheus.Metric) {
+	c.mu.Lock()
+	if c.cachedData != nil && time.Since(c.lastScrape) < c.scrapeInterval {
+		data := c.cachedData
+		c.mu.Unlock()
+		c.emitMetrics(ch, data)
+		return
+	}
+	c.mu.Unlock()
+
+	data := c.fetchAll()
+
+	c.mu.Lock()
+	c.cachedData = data
+	c.lastScrape = time.Now()
+	c.mu.Unlock()
+
+	c.emitMetrics(ch, data)
+}
+
+func (c *Collector) fetchAll() *scrapeResult {
 	start := time.Now()
 	var scrapeErrors float64
 
 	var (
-		incidents  []client.Incident
-		alerts     []client.Alert
-		sevs       []client.Severity
-		wg         sync.WaitGroup
-		mu         sync.Mutex
+		incidents []client.Incident
+		alerts    []client.Alert
+		sevs      []client.Severity
+		wg        sync.WaitGroup
+		mu        sync.Mutex
 		incidentErr, alertErr, sevErr error
 	)
 
 	wg.Add(3)
 	go func() {
 		defer wg.Done()
-		var err error
 		i, err := c.client.ListIncidents()
 		mu.Lock()
 		incidents = i
@@ -129,24 +173,37 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 	if incidentErr != nil {
 		slog.Error("failed to list incidents", "error", incidentErr)
 		scrapeErrors++
-	} else {
-		collectIncidents(ch, c.incidentsTotal, c.incidentDuration, incidents)
 	}
-
 	if alertErr != nil {
 		slog.Error("failed to list alerts", "error", alertErr)
 		scrapeErrors++
-	} else {
-		collectAlerts(ch, c.alertsTotal, alerts)
 	}
-
 	if sevErr != nil {
 		slog.Error("failed to list severities", "error", sevErr)
 		scrapeErrors++
-	} else {
-		collectSeverities(ch, c.severities, sevs)
 	}
 
-	ch <- prometheus.MustNewConstMetric(c.scrapeDuration, prometheus.GaugeValue, time.Since(start).Seconds())
-	ch <- prometheus.MustNewConstMetric(c.scrapeErrors, prometheus.GaugeValue, scrapeErrors)
+	return &scrapeResult{
+		incidents: incidents,
+		alerts:    alerts,
+		sevs:      sevs,
+		errors:    scrapeErrors,
+		duration:  time.Since(start),
+	}
+}
+
+func (c *Collector) emitMetrics(ch chan<- prometheus.Metric, data *scrapeResult) {
+	if data.incidents != nil {
+		collectIncidents(ch, c.incidentsTotal, c.incidentDuration, data.incidents)
+	}
+	if data.alerts != nil {
+		collectAlerts(ch, c.alertsTotal, data.alerts)
+	}
+	if data.sevs != nil {
+		collectSeverities(ch, c.severities, data.sevs)
+	}
+
+	ch <- prometheus.MustNewConstMetric(c.scrapeDuration, prometheus.GaugeValue, data.duration.Seconds())
+	ch <- prometheus.MustNewConstMetric(c.scrapeErrors, prometheus.GaugeValue, data.errors)
+	ch <- prometheus.MustNewConstMetric(c.buildInfo, prometheus.GaugeValue, 1, c.version)
 }

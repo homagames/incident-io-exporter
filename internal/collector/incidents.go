@@ -14,6 +14,13 @@ func collectIncidents(ch chan<- prometheus.Metric, totalDesc, durationDesc *prom
 	}
 	counts := make(map[key]float64)
 
+	// Aggregate duration metrics by severity + metric name (average)
+	type durKey struct {
+		severity, metric string
+	}
+	durSums := make(map[durKey]float64)
+	durCounts := make(map[durKey]float64)
+
 	for _, inc := range incidents {
 		severity := ""
 		if inc.Severity != nil {
@@ -36,16 +43,10 @@ func collectIncidents(ch chan<- prometheus.Metric, totalDesc, durationDesc *prom
 			counts[k]++
 		}
 
-		// Emit duration metrics per incident
 		for _, d := range inc.Duration {
-			ch <- prometheus.MustNewConstMetric(
-				durationDesc,
-				prometheus.GaugeValue,
-				float64(d.ValueSeconds),
-				inc.Reference,
-				severity,
-				d.Metric.Name,
-			)
+			dk := durKey{severity: severity, metric: d.Metric.Name}
+			durSums[dk] += float64(d.ValueSeconds)
+			durCounts[dk]++
 		}
 	}
 
@@ -55,6 +56,15 @@ func collectIncidents(ch chan<- prometheus.Metric, totalDesc, durationDesc *prom
 			prometheus.GaugeValue,
 			v,
 			k.status, k.severity, k.incidentType, k.mode, k.visibility, k.team,
+		)
+	}
+
+	for dk, sum := range durSums {
+		ch <- prometheus.MustNewConstMetric(
+			durationDesc,
+			prometheus.GaugeValue,
+			sum/durCounts[dk],
+			dk.severity, dk.metric,
 		)
 	}
 }
