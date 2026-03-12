@@ -6,10 +6,11 @@ import (
 
 // CustomFieldValue represents a value within a custom field entry.
 type CustomFieldValue struct {
-	ValueLink    string `json:"value_link"`
-	ValueText    string `json:"value_text"`
-	ValueOption  *CustomFieldOption `json:"value_option,omitempty"`
-	ValueNumeric string `json:"value_numeric"`
+	ValueLink         string              `json:"value_link"`
+	ValueText         string              `json:"value_text"`
+	ValueOption       *CustomFieldOption  `json:"value_option,omitempty"`
+	ValueCatalogEntry *CatalogEntry       `json:"value_catalog_entry,omitempty"`
+	ValueNumeric      string              `json:"value_numeric"`
 }
 
 // CustomFieldOption represents an option value for a custom field.
@@ -18,6 +19,14 @@ type CustomFieldOption struct {
 	ID            string `json:"id"`
 	SortKey       int64  `json:"sort_key"`
 	Value         string `json:"value"`
+}
+
+// CatalogEntry represents a catalog entry referenced by a custom field value.
+type CatalogEntry struct {
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	ExternalID string   `json:"external_id"`
+	Aliases    []string `json:"aliases"`
 }
 
 // CustomField represents a custom field definition.
@@ -50,15 +59,16 @@ type Incident struct {
 }
 
 // Team returns the team name from the incident's custom field entries, or empty string if not set.
+// Uses the first value from the "Affected teams" multi-select catalog entry field.
 func (i *Incident) Team() string {
 	for _, entry := range i.CustomFieldEntries {
 		if entry.CustomField.Name == "Affected teams" {
 			if len(entry.Values) > 0 {
+				if entry.Values[0].ValueCatalogEntry != nil {
+					return entry.Values[0].ValueCatalogEntry.Name
+				}
 				if entry.Values[0].ValueOption != nil {
 					return entry.Values[0].ValueOption.Value
-				}
-				if entry.Values[0].ValueText != "" {
-					return entry.Values[0].ValueText
 				}
 			}
 			return ""
