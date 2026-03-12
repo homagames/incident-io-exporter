@@ -6,16 +6,19 @@ import (
 )
 
 func collectAlerts(ch chan<- prometheus.Metric, desc *prometheus.Desc, alerts []client.Alert) {
-	counts := make(map[string]float64)
-	for _, a := range alerts {
-		counts[a.Status]++
+	type key struct {
+		status, team string
 	}
-	for status, count := range counts {
+	counts := make(map[key]float64)
+	for _, a := range alerts {
+		counts[key{status: a.Status, team: a.Team()}]++
+	}
+	for k, count := range counts {
 		ch <- prometheus.MustNewConstMetric(
 			desc,
 			prometheus.GaugeValue,
 			count,
-			status,
+			k.status, k.team,
 		)
 	}
 }

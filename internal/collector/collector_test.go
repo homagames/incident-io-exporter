@@ -118,9 +118,27 @@ func TestCollect_Incidents(t *testing.T) {
 func TestCollect_Alerts(t *testing.T) {
 	mc := &mockClient{
 		alerts: []client.Alert{
-			{ID: "a1", Status: "firing"},
-			{ID: "a2", Status: "firing"},
-			{ID: "a3", Status: "resolved"},
+			{
+				ID:     "a1",
+				Status: "firing",
+				Attributes: []client.AlertAttributeEntry{
+					{Attribute: client.AlertAttribute{Name: "Team"}, Value: &client.AlertAttributeValue{Label: "Infra"}},
+				},
+			},
+			{
+				ID:     "a2",
+				Status: "firing",
+				Attributes: []client.AlertAttributeEntry{
+					{Attribute: client.AlertAttribute{Name: "Team"}, Value: &client.AlertAttributeValue{Label: "Infra"}},
+				},
+			},
+			{
+				ID:     "a3",
+				Status: "resolved",
+				Attributes: []client.AlertAttributeEntry{
+					{Attribute: client.AlertAttribute{Name: "Team"}, Value: &client.AlertAttributeValue{Label: "Platform"}},
+				},
+			},
 		},
 		severities: []client.Severity{},
 	}
@@ -132,23 +150,22 @@ func TestCollect_Alerts(t *testing.T) {
 	require.NotNil(t, alertTotal)
 
 	metrics := alertTotal.GetMetric()
-	assert.Len(t, metrics, 2) // firing + resolved
+	assert.Len(t, metrics, 2) // firing/Infra + resolved/Platform
 
-	var firingCount, resolvedCount float64
 	for _, m := range metrics {
+		labels := map[string]string{}
 		for _, l := range m.GetLabel() {
-			if l.GetName() == "status" {
-				switch l.GetValue() {
-				case "firing":
-					firingCount = m.GetGauge().GetValue()
-				case "resolved":
-					resolvedCount = m.GetGauge().GetValue()
-				}
-			}
+			labels[l.GetName()] = l.GetValue()
+		}
+		if labels["status"] == "firing" {
+			assert.Equal(t, "Infra", labels["team"])
+			assert.Equal(t, float64(2), m.GetGauge().GetValue())
+		}
+		if labels["status"] == "resolved" {
+			assert.Equal(t, "Platform", labels["team"])
+			assert.Equal(t, float64(1), m.GetGauge().GetValue())
 		}
 	}
-	assert.Equal(t, float64(2), firingCount)
-	assert.Equal(t, float64(1), resolvedCount)
 }
 
 func TestCollect_Severities(t *testing.T) {
