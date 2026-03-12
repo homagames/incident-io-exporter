@@ -52,7 +52,7 @@ type Incident struct {
 // Team returns the team name from the incident's custom field entries, or empty string if not set.
 func (i *Incident) Team() string {
 	for _, entry := range i.CustomFieldEntries {
-		if entry.CustomField.Name == "Team" {
+		if entry.CustomField.Name == "Affected teams" {
 			if len(entry.Values) > 0 {
 				if entry.Values[0].ValueOption != nil {
 					return entry.Values[0].ValueOption.Value
