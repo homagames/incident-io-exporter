@@ -24,15 +24,17 @@ func collectIncidents(ch chan<- prometheus.Metric, totalDesc, durationDesc *prom
 			incType = inc.Type.Name
 		}
 
-		k := key{
-			status:       inc.Status.Name,
-			severity:     severity,
-			incidentType: incType,
-			mode:         inc.Mode,
-			visibility:   inc.Visibility,
-			team:         inc.Team(),
+		for _, team := range inc.Teams() {
+			k := key{
+				status:       inc.Status.Name,
+				severity:     severity,
+				incidentType: incType,
+				mode:         inc.Mode,
+				visibility:   inc.Visibility,
+				team:         team,
+			}
+			counts[k]++
 		}
-		counts[k]++
 
 		// Emit duration metrics per incident
 		for _, d := range inc.Duration {

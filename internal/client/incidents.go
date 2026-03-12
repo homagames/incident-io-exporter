@@ -58,23 +58,26 @@ type Incident struct {
 	Duration          []DurationValue    `json:"duration_metrics"`
 }
 
-// Team returns the team name from the incident's custom field entries, or empty string if not set.
-// Uses the first value from the "Affected teams" multi-select catalog entry field.
-func (i *Incident) Team() string {
+// Teams returns the team names from the incident's "Affected teams" custom field.
+// Returns a slice with one empty string if no teams are set, so the incident is still counted.
+func (i *Incident) Teams() []string {
 	for _, entry := range i.CustomFieldEntries {
 		if entry.CustomField.Name == "Affected teams" {
-			if len(entry.Values) > 0 {
-				if entry.Values[0].ValueCatalogEntry != nil {
-					return entry.Values[0].ValueCatalogEntry.Name
-				}
-				if entry.Values[0].ValueOption != nil {
-					return entry.Values[0].ValueOption.Value
+			var teams []string
+			for _, v := range entry.Values {
+				if v.ValueCatalogEntry != nil {
+					teams = append(teams, v.ValueCatalogEntry.Name)
+				} else if v.ValueOption != nil {
+					teams = append(teams, v.ValueOption.Value)
 				}
 			}
-			return ""
+			if len(teams) > 0 {
+				return teams
+			}
+			return []string{""}
 		}
 	}
-	return ""
+	return []string{""}
 }
 
 // IncidentStatus represents an incident status.
