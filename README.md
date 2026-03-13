@@ -10,10 +10,11 @@ Prometheus exporter for [incident.io](https://incident.io) — collects incident
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `incidentio_incidents_total` | Gauge | `status`, `severity`, `type`, `mode`, `visibility` | Count of incidents |
-| `incidentio_incidents_duration_seconds` | Gauge | `incident`, `severity`, `metric` | Duration metric values per incident |
-| `incidentio_alerts_total` | Gauge | `status` | Count of alerts |
+| `incidentio_incidents_total` | Gauge | `status`, `severity`, `type`, `mode`, `visibility`, `team` | Count of incidents |
+| `incidentio_incidents_duration_seconds` | Gauge | `severity`, `metric` | Average duration metric values by severity |
+| `incidentio_alerts_total` | Gauge | `status`, `team` | Count of alerts |
 | `incidentio_severities` | Gauge | `name`, `rank` | Configured severities |
+| `incidentio_build_info` | Gauge | `version` | Build information |
 | `incidentio_scrape_duration_seconds` | Gauge | — | Time taken for the last scrape |
 | `incidentio_scrape_errors_total` | Gauge | — | Total scrape errors |
 
@@ -51,6 +52,7 @@ env:
   LISTEN_ADDRESS: ":9090"
   METRICS_PATH: "/metrics"
   LOG_LEVEL: "info"
+  SCRAPE_INTERVAL: "1m"
 
 existingSecret: "my-incident-io-secret"
 secretKey: "api-key"
@@ -102,6 +104,7 @@ All configuration is via environment variables:
 | `LISTEN_ADDRESS` | `:9090` | HTTP server listen address |
 | `METRICS_PATH` | `/metrics` | Prometheus metrics endpoint path |
 | `LOG_LEVEL` | `info` | Log level (`debug`, `info`, `warn`, `error`) |
+| `SCRAPE_INTERVAL` | `1m` | How often to query the incident.io API (min `10s`) |
 
 ### Endpoints
 
@@ -122,9 +125,8 @@ The exporter uses the following incident.io API endpoints:
 - `GET /v2/incidents` — list incidents (cursor pagination, max 250 per page)
 - `GET /v2/alerts` — list alerts (cursor pagination, max 50 per page)
 - `GET /v1/severities` — list configured severities
-- `GET /v1/incident-statuses` — list incident statuses
 
-Authentication is via `Authorization: Bearer <API_KEY>`. The API has a rate limit of 1200 requests/min per key; the client respects `429` responses with `Retry-After` headers.
+Authentication is via `Authorization: Bearer <API_KEY>`. The API has a rate limit of 1200 requests/min per key; the client retries `429` responses with exponential backoff using `Retry-After` headers.
 
 ## Contributing
 

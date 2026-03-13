@@ -38,30 +38,33 @@ internal/
     incidents.go                 → GET /v2/incidents (list with cursor pagination)
     alerts.go                    → GET /v2/alerts (list with cursor pagination)
     severities.go                → GET /v1/severities
-    incident_statuses.go         → GET /v1/incident-statuses
   collector/                     → Prometheus collectors
-    collector.go                 → Main collector implementing prometheus.Collector
-    incidents.go                 → Incident metrics (gauges by status/severity/type)
-    alerts.go                    → Alert metrics (gauges by status/source)
+    collector.go                 → Main collector with caching and scrape interval
+    incidents.go                 → Incident metrics (gauges by status/severity/type/team)
+    alerts.go                    → Alert metrics (gauges by status/team)
 ```
 
 ## Key Design Decisions
 
 - **Single binary, single collector** — one `prometheus.Collector` registered with a default registry, scraped at `/metrics`.
-- **API pagination** — incident.io uses cursor-based pagination (`after` field in `pagination_meta`). All list endpoints page through until exhausted.
-- **Rate limiting** — incident.io allows 1200 req/min per API key. The client respects `429` responses with `Retry-After`.
-- **Labels** — Prometheus metrics use low-cardinality labels only: `status`, `severity`, `type`, `mode`, `visibility`. No incident names/IDs as labels.
+- **Caching collector** — API results are cached for the configured `SCRAPE_INTERVAL` (default 1m) to avoid hammering the API on every Prometheus scrape.
+- **API pagination** — incident.io uses cursor-based pagination (`after` field in `pagination_meta`). All list endpoints page through until exhausted. Max 500 pages with stuck-cursor detection.
+- **Rate limiting** — incident.io allows 1200 req/min per API key. The client retries `429` responses with `Retry-After` and exponential backoff (up to 3 retries).
+- **Context propagation** — all HTTP requests use `context.WithTimeout` (10s per request) for cancellation support.
+- **Graceful shutdown** — the server handles SIGTERM/SIGINT and drains in-flight requests before exiting.
+- **Labels** — Prometheus metrics use low-cardinality labels only: `status`, `severity`, `type`, `mode`, `visibility`, `team`. No incident names/IDs as labels.
 
 ## Prometheus Metrics Exposed
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
 | `incidentio_incidents_total` | Gauge | status, severity, type, mode, visibility, team | Count of incidents |
-| `incidentio_incidents_duration_seconds` | Gauge | name, severity | Duration metric values |
+| `incidentio_incidents_duration_seconds` | Gauge | severity, metric | Average duration metric values by severity |
 | `incidentio_alerts_total` | Gauge | status, team | Count of alerts |
 | `incidentio_severities` | Gauge | name, rank | Configured severities |
+| `incidentio_build_info` | Gauge | version | Build information |
 | `incidentio_scrape_duration_seconds` | Gauge | — | Time taken for last scrape |
-| `incidentio_scrape_errors_total` | Counter | — | Total scrape errors |
+| `incidentio_scrape_errors_total` | Gauge | — | Total scrape errors |
 
 ## incident.io API Reference
 
@@ -94,3 +97,4 @@ internal/
 | `LISTEN_ADDRESS` | `:9090` | HTTP server listen address |
 | `METRICS_PATH` | `/metrics` | Prometheus metrics endpoint path |
 | `LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
+| `SCRAPE_INTERVAL` | `1m` | How often to query the incident.io API (min 10s) |
