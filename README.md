@@ -123,7 +123,7 @@ If you run in a restricted network environment (e.g. Cilium `NetworkPolicy`, Cal
 | Source | Port | Protocol | Method | Path | Description |
 |--------|------|----------|--------|------|-------------|
 | Prometheus scraper | `9090/tcp` (or your `LISTEN_ADDRESS`) | HTTP | `GET` | `/metrics` | Metrics scraping |
-| Kubernetes kubelet | `9090/tcp` (or your `LISTEN_ADDRESS`) | HTTP | `GET` | `/healthz` | Liveness/readiness probe |
+| Kubernetes kubelet (`health` entity in Cilium) | `9090/tcp` (or your `LISTEN_ADDRESS`) | HTTP | `GET` | `/healthz` | Liveness/readiness probe |
 
 **Egress:**
 
