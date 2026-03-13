@@ -114,6 +114,22 @@ All configuration is via environment variables:
 | `/healthz` | Health check (returns `200 OK`) |
 | `/` | Landing page with link to metrics |
 
+## Network Traffic
+
+If you run in a restricted network environment (e.g. Cilium `NetworkPolicy`, Calico, or Kubernetes `NetworkPolicy`), here is what this exporter needs:
+
+**Ingress:**
+
+| Source | Port | Protocol | Description |
+|--------|------|----------|-------------|
+| Prometheus scraper | `9090/tcp` (or your `LISTEN_ADDRESS`) | HTTP | Metrics scraping |
+
+**Egress:**
+
+| Destination | Port | Protocol | Description |
+|-------------|------|----------|-------------|
+| `api.incident.io` | `443/tcp` | HTTPS | incident.io API calls |
+
 ## Grafana Dashboard
 
 A pre-built Grafana dashboard is included in [`dashboards/incident-io-exporter.json`](dashboards/incident-io-exporter.json). Import it via the Grafana UI or provision it with your Grafana configuration.
