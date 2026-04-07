@@ -44,11 +44,13 @@ spec:
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
+            {{- if .Values.existingSecret }}
             - name: INCIDENT_IO_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.existingSecret | default (include "incident-io-exporter.fullname" .) }}
+                  name: {{ .Values.existingSecret }}
                   key: {{ .Values.secretKey }}
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /healthz

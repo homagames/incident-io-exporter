@@ -27,9 +27,10 @@ env:
   METRICS_PATH: "/metrics"
   LOG_LEVEL: "info"
 
-# Reference to an existing secret containing INCIDENT_IO_API_KEY
+# Optional: reference to an existing Kubernetes Secret containing INCIDENT_IO_API_KEY.
+# If not set, you must provide INCIDENT_IO_API_KEY via the env map above.
 existingSecret: ""
-# Key in the secret that contains the API key
+# Key in the secret that contains the API key (only used when existingSecret is set)
 secretKey: "api-key"
 
 podAnnotations:

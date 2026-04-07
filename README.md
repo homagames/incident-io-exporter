@@ -22,18 +22,26 @@ Prometheus exporter for [incident.io](https://incident.io) — collects incident
 
 ### Helm (recommended)
 
+**Option A — Using a Kubernetes Secret (recommended):**
+
 ```bash
+kubectl create secret generic my-incident-io-secret \
+  --from-literal=api-key=YOUR_API_KEY
+
 helm install incident-io-exporter \
   oci://ghcr.io/homagames/incident-io-exporter/charts/incident-io-exporter \
   --set existingSecret=my-incident-io-secret
 ```
 
-The chart expects a Kubernetes Secret with your API key. Create it first:
+**Option B — Using an environment variable:**
 
 ```bash
-kubectl create secret generic my-incident-io-secret \
-  --from-literal=api-key=YOUR_API_KEY
+helm install incident-io-exporter \
+  oci://ghcr.io/homagames/incident-io-exporter/charts/incident-io-exporter \
+  --set env.INCIDENT_IO_API_KEY=your-api-key
 ```
+
+> **Note:** Option B stores the API key in plain text in the Deployment spec. Prefer Option A for production use.
 
 #### Helm values
 
@@ -53,8 +61,10 @@ env:
   METRICS_PATH: "/metrics"
   LOG_LEVEL: "info"
   SCRAPE_INTERVAL: "1m"
+  # INCIDENT_IO_API_KEY: "your-api-key"  # Option B: set directly (not recommended for production)
 
-existingSecret: "my-incident-io-secret"
+# Option A: reference an existing Kubernetes Secret containing the API key
+existingSecret: ""
 secretKey: "api-key"
 
 resources:
